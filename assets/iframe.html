@@ -3,16 +3,117 @@
   <meta charset="utf-8">
   <!-- http://garden.zendesk.com -->
   <link rel="stylesheet" href="https://assets.zendesk.com/apps/sdk-assets/css/0/zendesk_garden.css" type="text/css">
+  <link rel="stylesheet" href="http://garden.zendesk.com/index.css" type="text/css">
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
 </head>
 <body>
-  <h2 class="u-gamma">Hello, World!</h2>
+<main class="c-main c-main--page">
+  <h2 class="u-gamma">Select your skills</h2>
+  <div class="c-main__body">
+    <div class="l-grid">
+      <div class="l-grid-item u-1/2" id="skills_form"></div>
+    </div>
+  </div>
+</main>
   <!-- https://github.com/zendesk/zendesk_app_framework_sdk -->
   <script type="text/javascript" src="https://assets.zendesk.com/apps/sdk/2.0/zaf_sdk.js"></script>
   <script>
     // Initialise the Zendesk JavaScript API client
     // https://developer.zendesk.com/apps/docs/apps-v2
+
+    function createSkill() {
+      var title = $('#skill_textbox').val();
+      var key = title.toLowerCase().replace(/\W/g, '');
+
+      var settings = {
+        url: '/api/v2/user_fields.json',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+          user_field: {
+            type: 'checkbox',
+            title: title,
+            active: true,
+            key: key,
+            description: ''
+          }
+        })
+      };
+      client.request(settings).then(function(data) {
+        console.log(data)
+        $('#skill_textbox').val('');
+        addSkillCheckbox($('#skills_form'), data.user_field);
+      });
+
+      settings = {
+        url: '/api/v2/groups.json',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify
+      }
+    }
+
+    function onSkillChange(id) {
+      if ($(this).is(':checked')) {
+        client.request({url: "/api/v2/user_fields/" + id + ".json", type: 'PUT'});
+      } else {
+        client.set('user_fields.' + i + '.active', false);
+      }
+    }
+
+    function addSkillCheckbox(element, user_field) {
+      checkbox = $('<input class="c-chk c-chk--toggle l-grid-item u-1/24" type="checkbox"/>');
+
+      if (currentUserFields[user_field.key]) {
+        checkbox.prop('checked', true)
+      }
+
+      checkbox.change(onSkillChange.bind(user_field.id));
+
+      grid = $('<div class="l-grid">');
+      grid.append(checkbox, '<label class="c-chk--label l-grid-item u-23/24">' + user_field.title + '</label><br>')
+      element.append(grid);
+    }
+
+    function populateUserFields(user_fields) {
+      console.log(user_fields.length);
+      var skillForm = $('#skills_form');
+
+      if (currentUser.role == "admin") {
+        var skillInput = $('<div class="l-grid"><input id="skill_textbox" class="l-grid-item u-6/12" type="text"/><button id="add_skill_button" class="c-btn c-btn--primary l-grid-item">Add Skill</button></div>');
+        skillForm.append(skillInput);
+        console.log(skillInput.children('button'))
+        skillInput.children('button')[0].onclick = createSkill;
+      }
+
+      var checkbox;
+      for(i = 0; i < user_fields.length; i++) {
+        addSkillCheckbox(skillForm, user_fields[i])
+      }
+    }
+
+    function getUserFields(user_fields) {
+      currentUserFields = user_fields;
+    }
+
     var client = ZAFClient.init();
-    client.invoke('resize', { width: '100%', height: '200px' });
+    var currentUserFields;
+    var currentUser;
+    console.log(client)
+    //client.on("userFields", onUserFields);
+    client.get('currentUser').then(function(data){
+      console.log(data);
+      currentUser = data.currentUser
+      client.request('/api/v2/users/' + currentUser.id + '.json')
+        .then(getUserFields)
+        .then( function() {
+          client.request('/api/v2/user_fields.json').then( function(data){
+            console.log(data);
+            populateUserFields(data.user_fields);
+          })
+        })
+    })
+    //client.request("/api/v2/user_fields.json").then(onUserFields);
   </script>
 </body>
 </html>
