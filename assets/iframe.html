@@ -8,7 +8,7 @@
 </head>
 <body>
 <main class="c-main c-main--page">
-  <h2 class="u-gamma">Select your skills</h2>
+  <h2 class="u-gamma">Select Skills</h2>
   <div class="c-main__body">
     <div class="l-grid">
       <div class="l-grid-item u-1/2" id="skills_form"></div>
@@ -268,9 +268,9 @@
       var skillForm = $('#skills_form');
 
       if (currentUser.role == "admin") {
-        var skillInput = $('<div class="l-grid"><input id="skill_textbox" class="l-grid-item u-6/12" type="text"/><button id="add_skill_button" class="c-btn c-btn--primary l-grid-item">Add Skill</button></div>');
+        var skillInput = $('<div class="l-grid"><input id="skill_textbox" class="c-txt__input l-grid-item u-6/12" type="text"/><button id="add_skill_button" class="c-btn c-btn--primary l-grid-item">Add Skill</button></div>');
         skillForm.append(skillInput);
-        console.log(skillInput.children('button'))
+        skillForm.append('<div class="l-grid"><select class="l-grid-item u-1/3 c-txt__input c-txt__input--select"><option>John Smith</option></select></div>');
         skillInput.children('button')[0].onclick = createSkill;
       }
 
