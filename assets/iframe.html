@@ -21,6 +21,131 @@
     // Initialise the Zendesk JavaScript API client
     // https://developer.zendesk.com/apps/docs/apps-v2
 
+    function updateTicketField(key, value) {
+      var settings = {
+        url: '/api/v2/ticket_fields/' + ticketFieldId + '.json',
+        type: 'GET'
+      }
+
+      client.request(settings).then(function (data) {
+        var settings = {
+          url: '/api/v2/ticket_fields/' + ticketFieldId + '.json',
+          type: 'PUT',
+          contentType: 'application/json',
+          data: JSON.stringify({
+            ticket_field: {
+              custom_field_options: data.ticket_field.custom_field_options.append({name: key, title: value})
+            }
+          })
+        }
+      })
+    }
+
+    function createGroup(key, name) {
+      var settings = {
+        url: '/api/v2/groups.json',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+          group: {
+            name: name
+          }
+        })
+      }
+
+      client.request(settings).then(function(data) {
+        var settings = {
+          url: '/api/v2/triggers.json',
+          type: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({
+            trigger: {
+              title: name,
+              conditions: {
+                all: [
+                  {
+                    field: 'requester.custom_fields.' + key,
+                    condition: 'is',
+                    value: true
+                  }
+                ],
+                any: [],
+              },
+              actions: [
+                {
+                  field: 'group',
+                  value: name
+                }
+              ]
+            }
+          })
+        }
+
+        client.request(settings)
+
+        var settings = {
+          url: '/api/v2/views.json',
+          type: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({
+            view: {
+              title: name,
+              conditions: {
+                all: [
+                  {
+                    field: 'group',
+                    operator: 'is',
+                    value: data.id
+                  }
+                ],
+                any: []
+              }
+            }
+          })
+        }
+
+        client.request(settings);
+      })
+    }
+
+    function createCustomTicketField() {
+      var settings = {
+        url: '/api/v2/ticket_fields.json',
+        type: 'GET',
+      }
+
+      client.request(settings).then(function(data) {
+        var ticketFieldExists = false;
+        for (var i = 0; i < data.ticket_fields.length; i++) {
+          console.log(data.ticket_fields[i].title)
+          if (data.ticket_fields[i].title == "Skill") {
+            ticketFieldExists = true;
+            ticketFieldId = data.ticket_fields[i].id;
+            break;
+          }
+        }
+
+        if (!ticketFieldExists) {
+          var settings = {
+            url: '/api/v2/ticket_fields.json',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+              ticket_field: {
+                type: 'tagger',
+                title: 'Skill',
+                custom_field_options: [{name: 'Example', value: 'ExampleValue'}]
+              }
+            })
+          }
+
+          client.request(settings).then(function(data) {
+            ticketFieldId = data.ticket_field.id
+          })
+        }
+      })
+    }
+
     function createSkill() {
       var title = $('#skill_textbox').val();
       var key = title.toLowerCase().replace(/\W/g, '');
@@ -39,26 +164,85 @@
           }
         })
       };
+
       client.request(settings).then(function(data) {
         console.log(data)
         $('#skill_textbox').val('');
         addSkillCheckbox($('#skills_form'), data.user_field);
       });
 
-      settings = {
-        url: '/api/v2/groups.json',
-        type: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify
-      }
+      createCustomTicketField();
+
+      createGroup(key, title);
     }
 
-    function onSkillChange(id) {
-      if ($(this).is(':checked')) {
-        client.request({url: "/api/v2/user_fields/" + id + ".json", type: 'PUT'});
-      } else {
-        client.set('user_fields.' + i + '.active', false);
+    function onSkillChange(id, key, name) {
+      //alert('Skill Changed')
+      var settings = {
+        url: '/api/v2/groups.json',
+        type: 'GET'
       }
+      var checkbox = this;
+
+      client.request(settings).then(function(data) {
+        var groupId;
+
+        for (i = 0; i < data.groups.length; i++) {
+          console.log(data.groups[i].name + ': ' + name);
+          if (data.groups[i].name == name) {
+            groupId = data.groups[i].id;
+            console.log(groupId);
+            break;
+          }
+        }
+
+        if ($(checkbox).is(':checked')) {
+          console.log('Checked')
+          client.request({
+            url: '/api/v2/group_memberships.json',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+              group_membership: {
+                user_id: currentUser.id,
+                group_id: groupId
+              }
+            })
+          });
+
+          currentUserFields[key] = true;
+
+        } else {
+          currentUserFields[key] = false;
+          client.request({
+            url: '/api/v2/group_memberships.json',
+            type: 'GET'
+          }).then(function(data){
+            for (i = 0; i < data.group_memberships.length; i++) {
+              if (data.group_memberships[i].user_id == currentUser.id && data.group_memberships[i].group_id == groupId) {
+                client.request({
+                  url: '/api/v2/group_memberships/' + data.group_memberships[i].id + '.json',
+                  type: 'DELETE'
+                });
+              }
+            }
+          });
+        }
+
+        console.log(currentUserFields);
+
+        client.request({
+          url: '/api/v2/users/create_or_update.json',
+          type: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({
+            user: {
+              email: currentUser.email,
+              user_fields: currentUserFields
+            }
+          })
+        });
+      })
     }
 
     function addSkillCheckbox(element, user_field) {
@@ -68,11 +252,15 @@
         checkbox.prop('checked', true)
       }
 
-      checkbox.change(onSkillChange.bind(user_field.id));
+      checkbox.change(onSkillChange.bind(checkbox, user_field.id, user_field.key, user_field.title));
 
       grid = $('<div class="l-grid">');
-      grid.append(checkbox, '<label class="c-chk--label l-grid-item u-23/24">' + user_field.title + '</label><br>')
+      grid.append(checkbox, '<label class="c-txt__label l-grid-item u-23/24">' + user_field.title + '</label><br>')
       element.append(grid);
+    }
+
+    function addUserDropdown(data) {
+      return;
     }
 
     function populateUserFields(user_fields) {
@@ -88,19 +276,28 @@
 
       var checkbox;
       for(i = 0; i < user_fields.length; i++) {
-        addSkillCheckbox(skillForm, user_fields[i])
+        if (user_fields[i].active) {
+          addSkillCheckbox(skillForm, user_fields[i])
+        }
       }
     }
 
-    function getUserFields(user_fields) {
-      currentUserFields = user_fields;
+    function getUserFields(data) {
+      console.log(data)
+      currentUserFields = data.user.user_fields;
     }
 
     var client = ZAFClient.init();
+    var userFields;
     var currentUserFields;
     var currentUser;
-    console.log(client)
-    //client.on("userFields", onUserFields);
+    var ticketFieldId;
+
+    client.request('/api/v2/views.json').then(function(data) {
+      console.log(data)
+    })
+    
+    createCustomTicketField();
     client.get('currentUser').then(function(data){
       console.log(data);
       currentUser = data.currentUser
